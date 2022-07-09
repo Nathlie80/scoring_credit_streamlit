@@ -8,7 +8,7 @@ import streamlit as st
 
 from PIL import Image
 
-import numpy as np
+import pickle
 import pandas as pd
 from joblib import load
 import requests
@@ -23,9 +23,15 @@ import shap
 application = pd.read_pickle('sample.pkl')
 application = application.reset_index(drop=True)
 
-# Import data
+# Import data_norm
 appli_norm = pd.read_pickle('sample_norm.pkl')
 appli_norm = appli_norm.reset_index(drop=True)
+
+# Import dic most important values by index client
+col_shap_most_importance_dic = pickle.load(open("col_shap_most_importance_dic.p", 'rb'))
+
+# Import dic descriptions columns
+columns_descrition_dic = pickle.load(open("columns_descrition_dic.p", 'rb'))
 
 # Threshold calculate for this model
 threshold = 0.18
@@ -60,9 +66,10 @@ index_client = application[application['SK_ID_CURR']==id_client].index.tolist()
 
 client_list = application['SK_ID_CURR'].tolist()
 
+
 # Interact with FastAPI endpoint
 ## Using Docker images and containers
-## backend = "http://backend:8000/predict" 
+backend = "http://backend:8000/predict" 
 
 ## Using link FastAPI deploy with Heroku
 backend_web = "https://scoring-credit-pad.herokuapp.com/predict"
@@ -173,25 +180,25 @@ with st.expander("Details to explain the answer"):
 with st.expander("Details with the most impactful variables"):
     
     # List of the 20 variables that influence the result 
-    feature_names = data.columns
+    #feature_names = data.columns
     
-    rf_resultX = pd.DataFrame(shap_values[pred], columns = feature_names)
+    #rf_resultX = pd.DataFrame(shap_values[pred], columns = feature_names)
     
-    vals = np.abs(rf_resultX.filter(
-        items=[index_client[0]],
-        axis=0).values).mean(0)
+    #vals = np.abs(rf_resultX.filter(
+        #items=[index_client[0]],
+        #axis=0).values).mean(0)
     
-    shap_importance = pd.DataFrame(
-        list(zip(feature_names, vals)),
-        columns=['col_name','feature_importance_vals'])
+    #shap_importance = pd.DataFrame(
+        #list(zip(feature_names, vals)),
+        #columns=['col_name','feature_importance_vals'])
     
-    shap_importance.sort_values(by=['feature_importance_vals'],
-                                   ascending=False, inplace=True)
-    shap_most_importance = shap_importance.head(20)
-    col_shap_most_importance = shap_most_importance['col_name'].tolist()
+    #shap_importance.sort_values(by=['feature_importance_vals'],
+                                   #ascending=False, inplace=True)
+    #shap_most_importance = shap_importance.head(20)
+    #col_shap_most_importance = shap_most_importance['col_name'].tolist()
     
     # Clients data
-    application.loc[application['SK_ID_CURR'] == id_client, col_shap_most_importance]
+    application.loc[application['SK_ID_CURR'] == id_client, col_shap_most_importance_dic.get(index_client[0])]
     
 # SIDEBAR
 # Variables choice
@@ -199,11 +206,14 @@ st.sidebar.markdown('---')
 st.sidebar.subheader('Choose some variables')
 col_most_importance = st.sidebar.multiselect(
     label='Impactful variables', 
-    options = col_shap_most_importance)
+    options = col_shap_most_importance_dic.get(index_client[0]))
 
+# Button validation
 validation = st.sidebar.button('Variables choice validation')
 
 with st.expander("Graphic representation of selected variables"):
+
+
     if validation:
         for v in range(0,len(col_most_importance)):
             data_choose = pd.DataFrame(
@@ -222,7 +232,20 @@ with st.expander("Graphic representation of selected variables"):
             bar_plot = px.bar(
                 data_choose, 
                 color = 'Risk classification',
-                title = (u'Client values: <br>'  + col_most_importance[v] + ": "+ str(client_value) +"<br>Client risk classification: " + str(pred)),
+                title = (u'Client values: <br>'
+                         + col_most_importance[v] + ": "+ str(client_value) 
+                         +"<br>Client risk classification: " + str(pred)),
                 color_discrete_sequence=["#008B8B", "#B22222"])
-
+            
             st.plotly_chart(bar_plot, True)
+            
+            column_explaining = col_most_importance[v]
+            
+            if column_explaining not in columns_descrition_dic.keys():
+                for i in range (1,len(column_explaining)):
+                    column_explaining = column_explaining[0:-(i+1)]
+                    if column_explaining[0:-(i+1)] in columns_descrition_dic.keys():
+                        st.write(column_explaining[0:-(i+1)]+": "+str(columns_descrition_dic[column_explaining[0:-(i+1)]][0]))
+                        break
+            else :
+                st.write(col_most_importance[v]+": "+str(columns_descrition_dic[col_most_importance[v]][0]))   
