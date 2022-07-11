@@ -1,6 +1,6 @@
 # scoring_credit_streamlit
 
-Implementation of a credit scoring API
+Implementation of a credit scoring Dashboard
 
 Files:
 
